@@ -7,7 +7,7 @@ name = "python-cli-starter"
 version = "0.1.0"
 description = "CLI"
 readme = "README.md"
-requires-python = ">=3.7,<3.13" # Adjusted for datetime.timezone
+requires-python = ">=3.9,<3.13"
 license = "MIT"
 keywords = []
 authors = [
@@ -32,7 +32,6 @@ dependencies = [
   "lark-oapi>=1.2.0", # 版本更新
   "pytest>=7.0.0", # 确保 pytest 是开发依赖或测试依赖
   "httpx>=0.25.0", # 您代码中用到了 httpx，但没在依赖中
-  "zoneinfo; python_version < '3.9'", # 条件依赖 zoneinfo for Python < 3.9
   "pytz>=2025.2", # 添加 pytz"
   "pydantic>=2.11.4",
   "sqlalchemy>=2.0.0",      # ORM (对象关系映射) 库，用于操作数据库
@@ -49,4 +48,3 @@ cli = "python_cli_starter.main:app"
 addopts = "-ra -q --color=yes" # 添加 --color=yes
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-pythonpath = ["src"]  # <--- 关键改动在这里

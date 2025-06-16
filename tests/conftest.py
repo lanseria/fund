@@ -5,8 +5,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 # 导入你的主应用和数据库模型
-from src.python_cli_starter.main import app, get_db
-from src.python_cli_starter.models import Base
+from python_cli_starter.main import app, get_db
+from python_cli_starter.models import Base
 
 # --- 配置测试数据库 ---
 # 使用内存中的SQLite数据库进行测试

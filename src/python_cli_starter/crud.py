@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from fastapi import HTTPException
 from . import models, schemas
 
 def get_holding(db: Session, fund_code: str):
@@ -11,8 +12,13 @@ def get_holdings(db: Session, skip: int = 0, limit: int = 100):
 
 def create_holding(db: Session, holding: schemas.HoldingCreate):
     """创建一个新的持仓记录"""
-    # 在这里，您需要添加逻辑来获取'yesterday_nav'
-    # 暂时我们可以先用一个假数据
+    # 1. 先检查该基金代码是否已存在
+    db_holding = get_holding(db, fund_code=holding.code)
+    if db_holding:
+        # 如果已存在，则抛出 HTTP 400 错误
+        raise HTTPException(status_code=400, detail=f"基金代码 '{holding.code}' 已存在。")
+
+    # 2. 如果不存在，再执行创建逻辑
     # TODO: 从数据源获取真实的昨日净值
     yesterday_nav_mock = 1.0 
 
