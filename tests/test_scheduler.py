@@ -1,4 +1,4 @@
-# conftest.py (最终版)
+# conftest.py (最终修正版)
 
 import pytest
 from fastapi.testclient import TestClient
@@ -13,18 +13,14 @@ from python_cli_starter import main as main_app
 from python_cli_starter import crud as crud_module
 from python_cli_starter import services as services_module
 from python_cli_starter import scheduler as scheduler_module
-from python_cli_starter import models as production_models
 
 # ===============================================================
-#  1. 创建一个完全隔离的、自给自足的测试数据库环境
+#  1. 创建一个完全隔离的、自给自_足的测试数据库环境
 # ===============================================================
 
-# a. 创建一个不带 Schema 的 MetaData 和 Base
 test_metadata = MetaData()
 TestBase = declarative_base(metadata=test_metadata)
 
-# b. 在测试配置中，重新定义与生产代码结构一模一样的模型
-#    但它们继承自我们无 schema 的 TestBase
 class TestHolding(TestBase):
     __tablename__ = "my_holdings"
     code = Column(String, primary_key=True, index=True)
@@ -40,7 +36,6 @@ class TestNavHistory(TestBase):
     nav = Column(Numeric(10, 4), nullable=False)
     __table_args__ = (PrimaryKeyConstraint('code', 'nav_date', name='pk_fund_date'),)
 
-# c. 创建测试数据库引擎和会话
 TEST_DATABASE_URL = "sqlite:///:memory:"
 test_engine = create_engine(TEST_DATABASE_URL, poolclass=StaticPool, connect_args={"check_same_thread": False})
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
@@ -53,37 +48,34 @@ TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_
 def setup_test_environment(monkeypatch):
     """自动执行，将所有模块中对生产模型的引用替换为测试模型。"""
     
-    # 替换掉 CRUD 模块中对 models.Holding 和 models.NavHistory 的引用
-    monkeypatch.setattr(crud_module, "models", type('models', (), {'Holding': TestHolding, 'NavHistory': TestNavHistory})())
+    # --- 核心改动在这里 ---
+    # 对于 crud 和 services 模块，它们可能导入了整个 models 模块，所以替换 models
+    # 为了安全起见，即使它们也是直接导入类，这种方式也能兼容
+    fake_models_module = type('models', (), {'Holding': TestHolding, 'NavHistory': TestNavHistory})()
+    monkeypatch.setattr(crud_module, "models", fake_models_module)
+    monkeypatch.setattr(services_module, "models", fake_models_module)
+
+    # 对于 scheduler 模块，我们直接替换它导入的类
+    monkeypatch.setattr(scheduler_module, "Holding", TestHolding)
+    monkeypatch.setattr(scheduler_module, "NavHistory", TestNavHistory)
     
-    # 替换掉 Services 模块中对 models.Holding 的引用
-    monkeypatch.setattr(services_module, "models", type('models', (), {'Holding': TestHolding})())
-
-    # 替换掉 Scheduler 模块中对 models.Holding 和 models.NavHistory 的引用
-    monkeypatch.setattr(scheduler_module, "models", type('models', (), {'Holding': TestHolding, 'NavHistory': TestNavHistory})())
-
     # 同时替换掉 SessionLocal
     monkeypatch.setattr(scheduler_module, "SessionLocal", TestingSessionLocal)
 
 
 @pytest.fixture(scope="function")
 def db_session(setup_test_environment):
-    """提供一个干净的数据库会话。"""
     TestBase.metadata.create_all(bind=test_engine)
     db = TestingSessionLocal()
     yield db
     db.close()
     TestBase.metadata.drop_all(bind=test_engine)
 
-# ===============================================================
-#  3. API Client 和 Mock Fixtures (保持不变)
-# ===============================================================
-
+# ... API Client 和 Mock Fixtures 保持不变 ...
 @pytest.fixture(scope="function")
 def client(db_session):
     def override_get_db():
         yield db_session
-
     main_app.api_app.dependency_overrides[main_app.get_db] = override_get_db
     with TestClient(main_app.api_app) as c:
         yield c

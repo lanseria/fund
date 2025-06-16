@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# --- 保持生产环境的配置 ---
 DATABASE_URL = os.getenv("DATABASE_URL")
 DB_SCHEMA = os.getenv("DB_SCHEMA", "public") 
 
@@ -48,16 +49,7 @@ class NavHistory(Base):
 
 # 创建数据库表的函数 (可以在应用启动时调用一次)
 def create_db_and_tables():
-    # 当调用 create_all 时，SQLAlchemy 会检查 schema 是否存在
-    # 如果不存在，它会尝试创建 (需要用户有相应权限)
-    # 但我们推荐手动先创建好
     with engine.connect() as connection:
-        # --- 核心改动在这里 ---
-        # 使用 text() 函数将字符串标记为可执行的SQL
         connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {DB_SCHEMA}"))
-        
-        # SQLAlchemy 2.0 中，DDL 语句（如 CREATE）通常在事务之外执行
-        # 或者需要显式提交。这里的 commit() 是正确的。
         connection.commit()
-    
     Base.metadata.create_all(bind=engine)
