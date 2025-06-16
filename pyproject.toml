@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "python-cli-starter"
+version = "0.1.0"
+description = "CLI"
+readme = "README.md"
+requires-python = ">=3.7,<3.13" # Adjusted for datetime.timezone
+license = "MIT"
+keywords = []
+authors = [
+  { name = "lanseria", email = "zhangchao564265135@hotmail.com" },
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.7",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12", # Added 3.12
+]
+dependencies = [
+  "typer[all]>=0.9.0", # 使用 [all] 通常会包含 shell completion 等
+  "rich>=13.0.0",
+  "python-dotenv>=1.0.0", # 版本更新到 >=1.0.0 比较常见
+  "beautifulsoup4>=4.12.0", # 版本更新
+  "schedule>=1.2.2",
+  "lark-oapi>=1.2.0", # 版本更新
+  "pytest>=7.0.0", # 确保 pytest 是开发依赖或测试依赖
+  "httpx>=0.25.0", # 您代码中用到了 httpx，但没在依赖中
+  "zoneinfo; python_version < '3.9'", # 条件依赖 zoneinfo for Python < 3.9
+  "pytz>=2025.2", # 添加 pytz"
+  "pydantic>=2.11.4",
+]
+
+[project.scripts]
+cli = "python_cli_starter.main:app"
+
+[tool.pytest.ini_options]
+addopts = "-ra -q --color=yes" # 添加 --color=yes
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+pythonpath = ["src"]  # <--- 关键改动在这里

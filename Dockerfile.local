@@ -1,0 +1,36 @@
+# 使用官方 Python 镜像（建议3.12，确保与本地开发一致）
+FROM docker.m.daocloud.io/python:3.12-slim-bookworm
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    TZ=Asia/Shanghai \
+    LANG=C.UTF-8
+
+# 设置 apt 使用清华镜像源（适用于 Debian Bookworm）
+# 使用 DEB822 格式（不修改镜像源，保持默认官方源）
+RUN echo "Types: deb" > /etc/apt/sources.list.d/debian.sources && \
+    echo "URIs: http://mirrors.tuna.tsinghua.edu.cn/debian" >> /etc/apt/sources.list.d/debian.sources && \
+    echo "Suites: bookworm bookworm-updates bookworm-backports" >> /etc/apt/sources.list.d/debian.sources && \
+    echo "Components: main" >> /etc/apt/sources.list.d/debian.sources
+
+# 安装 tzdata 并设置时区
+RUN apt-get update && apt-get install -y tzdata && \
+    ln -fs /usr/share/zoneinfo/${TZ} /etc/localtime && \
+    dpkg-reconfigure -f noninteractive tzdata && \
+    rm -rf /var/lib/apt/lists/*
+
+# 设置工作目录
+WORKDIR /app
+
+# 复制项目文件到容器中
+COPY ./src ./src
+COPY ./pyproject.toml ./
+COPY ./README.md ./
+
+# 升级 pip 并使用清华镜像
+RUN pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+# 安装项目依赖（推荐使用 PEP 517/518 标准，支持 pyproject.toml）
+RUN pip install -e . -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+ENTRYPOINT ["cof", "start-scheduler"]
