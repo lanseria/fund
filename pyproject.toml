@@ -42,7 +42,8 @@ dependencies = [
 ]
 
 [project.scripts]
-cli = "python_cli_starter.main:app"
+# 将入口点从 main:app 修改为 cli:main
+cli = "python_cli_starter.cli:main"
 
 [tool.pytest.ini_options]
 addopts = "-ra -q --color=yes" # 添加 --color=yes

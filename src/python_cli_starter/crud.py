@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
-from . import models, schemas
+from . import models, schemas, services
 
 def get_holding(db: Session, fund_code: str):
     """根据基金代码查询单个持仓"""
@@ -10,28 +10,22 @@ def get_holdings(db: Session, skip: int = 0, limit: int = 100):
     """查询所有持仓记录，支持分页"""
     return db.query(models.Holding).offset(skip).limit(limit).all()
 
-def create_holding(db: Session, holding: schemas.HoldingCreate):
-    """创建一个新的持仓记录"""
-    # 1. 先检查该基金代码是否已存在
-    db_holding = get_holding(db, fund_code=holding.code)
-    if db_holding:
-        # 如果已存在，则抛出 HTTP 400 错误
-        raise HTTPException(status_code=400, detail=f"基金代码 '{holding.code}' 已存在。")
+def create_holding(db: Session, holding: schemas.HoldingCreate) -> models.Holding:
+    """
+    (API层) 创建一个新的持仓记录。
+    它会调用服务层的业务逻辑，并处理可能发生的业务异常。
+    """
+    try:
+        # 调用服务层的核心逻辑
+        new_holding = services.create_new_holding(db=db, holding_data=holding)
+        return new_holding
+    except services.HoldingExistsError as e:
+        # 将业务逻辑异常 转换为 FastAPI 的 HTTP 异常
+        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError as e:
+        # 捕获其他可能的业务错误，例如获取数据失败
+        raise HTTPException(status_code=404, detail=str(e))
 
-    # 2. 如果不存在，再执行创建逻辑
-    # TODO: 从数据源获取真实的昨日净值
-    yesterday_nav_mock = 1.0 
-
-    db_holding = models.Holding(
-        code=holding.code,
-        name=holding.name,
-        holding_amount=holding.holding_amount,
-        yesterday_nav=yesterday_nav_mock 
-    )
-    db.add(db_holding)
-    db.commit()
-    db.refresh(db_holding)
-    return db_holding
 
 def get_nav_history(db: Session, fund_code: str):
     """根据基金代码查询所有历史净值"""
