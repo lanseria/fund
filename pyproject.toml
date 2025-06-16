@@ -35,6 +35,11 @@ dependencies = [
   "zoneinfo; python_version < '3.9'", # 条件依赖 zoneinfo for Python < 3.9
   "pytz>=2025.2", # 添加 pytz"
   "pydantic>=2.11.4",
+  "sqlalchemy>=2.0.0",      # ORM (对象关系映射) 库，用于操作数据库
+  "psycopg2-binary>=2.9.0", # PostgreSQL for Python 的驱动程序
+  "pandas>=2.0.0",          # 用于数据处理，尤其是在计算均线时
+  "fastapi>=0.100.0",       # 用于搭建API服务
+  "uvicorn[standard]>=0.23.0", # ASGI服务器，用于运行FastAPI应用
 ]
 
 [project.scripts]
