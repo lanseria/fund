@@ -7,7 +7,7 @@ from rich.table import Table
 
 from .models import SessionLocal
 from . import services, schemas
-from .scheduler import update_all_nav_history # <--- 1. 导入要调用的函数
+from .scheduler import update_all_nav_history, update_today_estimate
 from .crud import get_holdings 
 
 # 将Typer实例命名为 cli_app，以示区分
@@ -50,6 +50,7 @@ def add_holding_command(
         console.print(f"[bold red]发生未知错误: {e}[/bold red]")
     finally:
         db.close()
+
 # --- 2. 添加新的 list-holdings 命令 ---
 @cli_app.command(name="list-holdings")
 def list_holdings_command():
@@ -150,6 +151,7 @@ def sync_history_command():
     
     try:
         # 直接调用我们已经写好的业务逻辑函数
+        update_today_estimate()
         update_all_nav_history()
         console.print("[bold green]✅ 同步任务执行完毕！[/bold green]")
     except Exception as e:

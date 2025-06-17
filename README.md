@@ -1,4 +1,3 @@
-
 # Fund Investment Assistant - Backend Server
 
 这是基金投资助手项目的 **Python 后端服务**。它使用 FastAPI, SQLAlchemy 和 Typer 构建，负责所有核心业务逻辑、数据处理和 API 服务。
@@ -65,6 +64,58 @@
 
 ---
 
+## ⌨️ 命令行 (CLI) 用法
+
+所有命令都通过 `uv run cli` 执行，无需手动激活虚拟环境。
+
+-   **查看所有可用命令**:
+    ```bash
+    uv run cli --help
+    ```
+
+### 查看持仓
+
+以美观的表格形式列出所有持仓基金及其预估盈亏。
+```bash
+uv run cli list-holdings
+```
+
+### 添加新的持仓
+```bash
+# 示例：添加一只基金，持有金额为 5000
+uv run cli add-holding --code "161725" --amount 5000
+```
+-   `--code` / `-c`: 基金代码 (**必填**)
+-   `--amount` / `-a`: 持有金额 (**必填**)
+-   `--name` / `-n`: 基金名称 (可选, 程序会自动获取。对于特殊基金可能需要手动提供)
+
+### 更新持仓金额
+```bash
+# 示例：将代码为 161725 的基金持有金额更新为 6500
+uv run cli update-holding --code "161725" --amount 6500
+```
+-   `--code` / `-c`: 要更新的基金代码 (**必填**)
+-   `--amount` / `-a`: 新的持有金额 (**必-   **删除持仓记录**
+此操作会进行交互式确认，防止误删。
+```bash
+# 示例：删除代码为 161725 的基金
+uv run cli delete-holding 161725
+```
+> 终端会提示: ⚠️ 您确定要删除基金代码为 **161725** 的所有记录吗？此操作不可撤销！ [y/N]:
+
+如果要跳过确认（例如在脚本中使用），可以添加 `--force` 或 `-f` 标志：
+```bash
+uv run cli delete-holding 161725 --force
+```
+
+### 手动同步历史数据
+立即触发一次所有持仓基金的历史净值同步任务，这对于新添加基金后填充数据非常有用。
+```bash
+uv run cli sync-history
+```
+
+---
+
 ## 🐳 生产环境 Docker 部署
 
 我们使用 Docker 和 Docker Compose 进行生产环境的部署。部署流程分为**构建镜像**和**运行容器**两个步骤。
@@ -127,7 +178,6 @@ networks:
 docker-compose up -d
 ```
 -   `-d`: 在后台（detached mode）运行容器。
--   Docker Compose 会自动找到 `docker-compose.yml` 文件，并根据定义启动 `fund_service`。
 
 ### 4. 常用 Docker 命令
 
@@ -139,7 +189,7 @@ docker-compose up -d
     ```bash
     docker-compose down
     ```
--   **进入容器执行 CLI 命令**:
+-   **在运行的容器中执行 CLI 命令**:
     如果您需要手动执行一个 CLI 命令（例如 `sync-history`），可以使用 `docker-compose exec`：
     ```bash
     docker-compose exec fund_service cli sync-history
