@@ -1,5 +1,9 @@
-from sqlalchemy.orm import Session
+# services.py
 from . import models, schemas, data_fetcher
+from sqlalchemy.orm import Session
+from datetime import date
+import pandas as pd
+from typing import List, Optional
 
 # 自定义一个业务逻辑层面的异常，以便CLI和API可以分别处理
 class HoldingExistsError(Exception):
@@ -114,3 +118,53 @@ def delete_holding_by_code(db: Session, code: str):
     db.commit()
     
     # 删除操作成功，无需返回对象
+
+def get_history_with_ma(
+    db: Session, 
+    code: str, 
+    start_date: Optional[date] = None, 
+    end_date: Optional[date] = None,
+    ma_options: Optional[List[int]] = None
+) -> pd.DataFrame:
+    """
+    获取指定基金的历史净值，并计算指定的移动平均线。
+
+    Args:
+        db (Session): 数据库会话。
+        code (str): 基金代码。
+        start_date (Optional[date]): 查询开始日期。
+        end_date (Optional[date]): 查询结束日期。
+        ma_options (Optional[List[int]]): 需要计算的均线周期列表, e.g., [5, 10, 20]。
+
+    Returns:
+        pd.DataFrame: 包含净值和所选均线的数据框。
+    """
+    # 1. 构建基础查询
+    query = db.query(models.NavHistory).filter(models.NavHistory.code == code)
+
+    # 2. 根据日期参数筛选
+    if start_date:
+        query = query.filter(models.NavHistory.nav_date >= start_date)
+    if end_date:
+        query = query.filter(models.NavHistory.nav_date <= end_date)
+    
+    # 3. 按日期排序并执行查询
+    history_records = query.order_by(models.NavHistory.nav_date.asc()).all()
+    
+    if not history_records:
+        return pd.DataFrame() # 如果没有数据，返回一个空的 DataFrame
+
+    # 4. 将查询结果转换为 Pandas DataFrame
+    df = pd.DataFrame(
+        [(record.nav_date, float(record.nav)) for record in history_records],
+        columns=['date', 'nav']
+    )
+    df['date'] = pd.to_datetime(df['date'])
+    
+    # 5. 根据选项计算移动平均线
+    if ma_options:
+        for ma in ma_options:
+            if isinstance(ma, int) and ma > 0:
+                df[f'ma{ma}'] = df['nav'].rolling(window=ma).mean()
+
+    return df

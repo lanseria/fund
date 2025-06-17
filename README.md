@@ -55,7 +55,7 @@
 
 -   **启动 API 服务**:
     ```bash
-    uv run uvicorn src.python_cli_starter.main:api_app --reload
+    uv run python -m uvicorn src.python_cli_starter.main:api_app --reload
     ```
     服务启动后，可在 `http://127.0.0.1:8000/docs` 查看 API 文档。
 
