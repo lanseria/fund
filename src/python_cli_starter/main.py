@@ -5,6 +5,8 @@ from fastapi.responses import JSONResponse
 from datetime import date
 from typing import List, Optional
 from sqlalchemy.orm import Session
+from contextlib import asynccontextmanager # 1. 导入 asynccontextmanager
+from .scheduler import scheduler_runner # 2. 导入我们的调度器实例
 
 from . import models, crud, schemas, services # 保持不变
 from .models import SessionLocal
@@ -13,8 +15,23 @@ import json
 # 在应用启动时创建数据库表
 models.create_db_and_tables()
 
+# 3. 定义 lifespan 事件管理器
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 在应用启动时执行的代码
+    print("FastAPI 应用启动...")
+    # 启动后台调度器
+    scheduler_runner.start()
+    
+    yield # 这是应用运行的时间点
+    
+    # 在应用关闭时执行的代码
+    print("FastAPI 应用关闭...")
+    # 停止后台调度器
+    scheduler_runner.stop()
+
 # 将FastAPI实例命名为 api_app，以示区分
-api_app = FastAPI(title="基金投资助手 API")
+api_app = FastAPI(title="基金投资助手 API", lifespan=lifespan)
 
 # Dependency: 获取数据库会话
 def get_db():

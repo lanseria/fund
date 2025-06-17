@@ -2,6 +2,7 @@
 
 import schedule
 import time
+import threading # 1. 导入 threading
 from datetime import date, timedelta
 from sqlalchemy import func
 
@@ -118,25 +119,57 @@ def update_today_estimate():
         db.close()
 
 
-def run_scheduler():
-    """启动调度器"""
-    # 每日凌晨2点执行历史数据更新 (避开0点和1点的高峰)
-    schedule.every().day.at("02:00").do(update_all_nav_history)
-    
-    # 每个交易日的 09:30 到 15:00，每30分钟更新一次估值
-    # 这里是一个简化的实现，更精确的需要引入交易日历判断
-    for hour in range(9, 15):
-        schedule.every().monday.at(f"{hour:02d}:30").do(update_today_estimate)
-        schedule.every().tuesday.at(f"{hour:02d}:30").do(update_today_estimate)
-        schedule.every().wednesday.at(f"{hour:02d}:30").do(update_today_estimate)
-        schedule.every().thursday.at(f"{hour:02d}:30").do(update_today_estimate)
-        schedule.every().friday.at(f"{hour:02d}:30").do(update_today_estimate)
+# --- 2. 创建一个新的运行器类 ---
+class SchedulerRunner:
+    def __init__(self):
+        self._stop_event = threading.Event()
+        self._thread = None
+        self._setup_schedule()
 
-    print("调度器已启动... 按 Ctrl+C 退出")
-    # 首次启动时，先立即执行一次历史数据更新，以便快速填充数据
-    print("首次启动，立即执行一次历史净值更新任务...")
-    update_all_nav_history()
-    
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
+    def _setup_schedule(self):
+        """配置所有的定时任务"""
+        print("配置定时任务...")
+        schedule.every().day.at("02:00").do(update_all_nav_history)
+        
+        for hour in range(9, 15):
+            schedule.every().monday.at(f"{hour:02d}:30").do(update_today_estimate)
+            schedule.every().tuesday.at(f"{hour:02d}:30").do(update_today_estimate)
+            schedule.every().wednesday.at(f"{hour:02d}:30").do(update_today_estimate)
+            schedule.every().thursday.at(f"{hour:02d}:30").do(update_today_estimate)
+            schedule.every().friday.at(f"{hour:02d}:30").do(update_today_estimate)
+
+    def _run_continuously(self):
+        """在一个循环中运行所有待处理的任务，直到停止事件被设置"""
+        print("调度器线程已启动，等待执行任务...")
+        
+        # 首次启动，立即执行一次历史数据更新
+        print("首次启动，立即执行一次历史净值更新任务...")
+        update_all_nav_history()
+        
+        while not self._stop_event.is_set():
+            schedule.run_pending()
+            # 休眠1秒，避免CPU空转，同时让停止事件可以被快速响应
+            time.sleep(1)
+        
+        print("调度器线程已接收到停止信号，正在退出。")
+
+    def start(self):
+        """在后台线程中启动调度器"""
+        if self._thread is None or not self._thread.is_alive():
+            print("启动后台调度器线程...")
+            self._stop_event.clear()
+            self._thread = threading.Thread(target=self._run_continuously)
+            self._thread.daemon = True  # 设置为守护线程，主程序退出时它也会退出
+            self._thread.start()
+
+    def stop(self):
+        """停止调度器线程"""
+        if self._thread and self._thread.is_alive():
+            print("正在发送停止信号给调度器线程...")
+            self._stop_event.set()
+            self._thread.join(timeout=5) # 等待线程最多5秒钟
+            if self._thread.is_alive():
+                print("警告：调度器线程未在5秒内正常停止。")
+
+# 创建一个全局的调度器实例
+scheduler_runner = SchedulerRunner()

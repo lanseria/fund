@@ -1,33 +1,19 @@
-# docker-compose.yml
-
+# docker-compose.yml (简化后)
 services:
-  # API 服务
-  fund_api:
+  fund_service: # 将两个服务合并成一个
     build: .
-    container_name: fund_api_service
+    container_name: fund_service # 新的容器名
     env_file:
-      - .env # 您可以根据环境改为 .env.prod
+      - .env # 或 .env.prod
     ports:
-      - "8000:8000" # 将容器的8000端口映射到主机的8000端口
+      - "8000:8000"
     command: >
-      sh -c "uvicorn src.python_cli_starter.main:api_app --host 0.0.0.0 --port 8000"
+      sh -c "python -m uvicorn src.python_cli_starter.main:api_app --host 0.0.0.0 --port 8000"
     restart: unless-stopped
     networks:
-      - shared_app_net # 连接到外部共享网络
-
-  # 定时任务服务
-  fund_scheduler:
-    build: .
-    container_name: fund_scheduler_service
-    env_file:
-      - .env # 与API服务使用相同的环境变量
-    command: >
-      sh -c "python run_scheduler.py"
-    restart: unless-stopped
-    networks:
-      - shared_app_net # 也连接到外部共享网络
+      - shared_app_net
 
 networks:
   shared_app_net:
-    external: true # 声明这是一个外部已存在的网络
-    name: shared-db-network # 指定外部网络的名称
+    external: true
+    name: shared-db-network
