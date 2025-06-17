@@ -61,7 +61,7 @@
     ```bash
     uv run python -m uvicorn src.python_cli_starter.main:api_app --reload
     ```
-    服务启动后，定时任务会自动在后台运行。您可以在 `http://127.0.0.1:8000/docs` 查看 API 文档。
+    服务启动后，定时任务会自动在后台运行。您可以在 `http://127.0.0.1:8888/docs` 查看 API 文档。
 
 ---
 
@@ -109,9 +109,9 @@ services:
     env_file:
       - .env.prod # 加载生产环境变量
     ports:
-      - "8000:8000"
+      - "8888:8888"
     command: >
-      sh -c "python -m uvicorn src.python_cli_starter.main:api_app --host 0.0.0.0 --port 8000"
+      sh -c "python -m uvicorn src.python_cli_starter.main:api_app --host 0.0.0.0 --port 8888"
     restart: unless-stopped
     networks:
       - shared_app_net

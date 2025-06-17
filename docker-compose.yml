@@ -6,9 +6,9 @@ services:
     env_file:
       - .env # 或 .env.prod
     ports:
-      - "8000:8000"
+      - "8888:8888"
     command: >
-      sh -c "python -m uvicorn src.python_cli_starter.main:api_app --host 0.0.0.0 --port 8000"
+      sh -c "python -m uvicorn src.python_cli_starter.main:api_app --host 0.0.0.0 --port 8888"
     restart: unless-stopped
     networks:
       - shared_app_net

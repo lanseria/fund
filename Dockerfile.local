@@ -73,7 +73,7 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY --chown=appuser:appgroup ./src ./src
 
 # 声明容器将监听的端口（仅用于文档目的，实际端口映射在 docker-compose.yml 中定义）
-EXPOSE 8000
+EXPOSE 8888
 
 # 不设置固定的 CMD 或 ENTRYPOINT，启动命令将由 docker-compose.yml 提供
 # 这使得同一个镜像可以用于不同的目的（例如，运行API服务或执行一次性CLI命令）
