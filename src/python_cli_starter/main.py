@@ -1,6 +1,6 @@
 # src/python_cli_starter/main.py (修改后)
 
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 import pandas as pd
 
@@ -31,6 +31,23 @@ def read_holdings(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)
 def create_holding(holding: schemas.HoldingCreate, db: Session = Depends(get_db)):
     return crud.create_holding(db=db, holding=holding)
 
-# 删除和修改的API端点也应在此处实现...
-# @app.delete(...)
-# @app.put(...)
+# 创建一个 Pydantic 模型用于接收更新请求的数据
+class HoldingUpdate(schemas.BaseModel):
+    holding_amount: float
+
+@api_app.put("/holdings/{fund_code}", response_model=schemas.Holding)
+def update_holding_endpoint(fund_code: str, holding_update: HoldingUpdate, db: Session = Depends(get_db)):
+    """
+    更新指定基金代码的持仓金额。
+    """
+    return crud.update_holding(db=db, code=fund_code, amount=holding_update.holding_amount)
+
+
+@api_app.delete("/holdings/{fund_code}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_holding_endpoint(fund_code: str, db: Session = Depends(get_db)):
+    """
+    删除指定基金代码的持仓记录及其所有历史数据。
+    """
+    crud.delete_holding(db=db, code=fund_code)
+    # 成功时返回 204 No Content，不需要响应体
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

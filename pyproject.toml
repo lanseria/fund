@@ -30,7 +30,6 @@ dependencies = [
   "beautifulsoup4>=4.12.0", # 版本更新
   "schedule>=1.2.2",
   "lark-oapi>=1.2.0", # 版本更新
-  "pytest>=7.0.0", # 确保 pytest 是开发依赖或测试依赖
   "httpx>=0.25.0", # 您代码中用到了 httpx，但没在依赖中
   "pytz>=2025.2", # 添加 pytz"
   "pydantic>=2.11.4",
@@ -44,8 +43,3 @@ dependencies = [
 [project.scripts]
 # 将入口点从 main:app 修改为 cli:main
 cli = "python_cli_starter.cli:main"
-
-[tool.pytest.ini_options]
-addopts = "-ra -q --color=yes" # 添加 --color=yes
-testpaths = ["tests"]
-python_files = ["test_*.py"]

@@ -31,6 +31,19 @@ def get_nav_history(db: Session, fund_code: str):
     """根据基金代码查询所有历史净值"""
     return db.query(models.NavHistory).filter(models.NavHistory.code == fund_code).order_by(models.NavHistory.nav_date).all()
 
-# 未来您可以在这里添加 update 和 delete 的函数
-# def update_holding(...)
-# def delete_holding(...)
+
+def update_holding(db: Session, code: str, amount: float) -> models.Holding:
+    """(API层) 更新持仓金额"""
+    try:
+        return services.update_holding_amount(db=db, code=code, new_amount=amount)
+    except services.HoldingNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+def delete_holding(db: Session, code: str):
+    """(API层) 删除持仓记录"""
+    try:
+        services.delete_holding_by_code(db=db, code=code)
+        # 成功删除后，API 通常返回一个 204 No Content 状态码，表示无内容返回
+        # 我们可以在 main.py 中处理这个
+    except services.HoldingNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))

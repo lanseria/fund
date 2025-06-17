@@ -7,6 +7,8 @@ from rich.table import Table
 
 from .models import SessionLocal
 from . import services, schemas
+from .scheduler import update_all_nav_history # <--- 1. 导入要调用的函数
+from .crud import get_holdings 
 
 # 将Typer实例命名为 cli_app，以示区分
 cli_app = typer.Typer()
@@ -43,6 +45,161 @@ def add_holding_command(
         table.add_row("昨日净值 (Yesterday NAV)", f"{new_holding.yesterday_nav:.4f}")
         console.print(table)
     except services.HoldingExistsError as e:
+        console.print(f"[bold red]错误: {e}[/bold red]")
+    except Exception as e:
+        console.print(f"[bold red]发生未知错误: {e}[/bold red]")
+    finally:
+        db.close()
+# --- 2. 添加新的 list-holdings 命令 ---
+@cli_app.command(name="list-holdings")
+def list_holdings_command():
+    """
+    以表格形式列出所有持仓的基金。
+    """
+    console.print("[bold cyan]📊 正在查询所有持仓基金...[/bold cyan]")
+    db = SessionLocal()
+    try:
+        # 调用 crud 层的函数获取所有持仓记录
+        holdings = get_holdings(db)
+        
+        if not holdings:
+            console.print("🤷‍ 您当前没有任何持仓记录。")
+            return
+
+        # 使用 rich.Table 创建一个漂亮的表格
+        table = Table(
+            title="我的基金持仓组合",
+            caption=f"共 {len(holdings)} 只基金",
+            show_header=True, 
+            header_style="bold magenta"
+        )
+        
+        # 定义表头
+        table.add_column("代码 (Code)", style="dim", width=12)
+        table.add_column("名称 (Name)", min_width=20)
+        table.add_column("持有金额 (Amount)", justify="right", style="green")
+        table.add_column("昨日净值 (NAV)", justify="right")
+        table.add_column("今日估值 (Estimate)", justify="right")
+        table.add_column("估算涨跌幅 (%)", justify="right")
+
+        total_amount = 0.0
+        total_estimate_value = 0.0
+
+        # 遍历数据，填充表格行
+        for holding in holdings:
+            estimate_nav = holding.today_estimate_nav
+            yesterday_nav = holding.yesterday_nav
+            
+            # 计算估算涨跌幅
+            estimate_change_pct_str = "-"
+            if estimate_nav is not None and yesterday_nav > 0:
+                change_pct = ((estimate_nav / float(yesterday_nav)) - 1) * 100
+                # 根据涨跌幅设置颜色
+                if change_pct > 0:
+                    estimate_change_pct_str = f"[bold red]+{change_pct:.2f}%[/bold red]"
+                elif change_pct < 0:
+                    estimate_change_pct_str = f"[bold green]{change_pct:.2f}%[/bold green]"
+                else:
+                    estimate_change_pct_str = f"{change_pct:.2f}%"
+            
+            # 累加总资产
+            total_amount += float(holding.holding_amount)
+            if estimate_nav is not None:
+                # 估算市值 = 持有金额 / 昨日净值 * 今日估值
+                total_estimate_value += (float(holding.holding_amount) / float(yesterday_nav)) * estimate_nav
+            else:
+                total_estimate_value += float(holding.holding_amount)
+
+
+            table.add_row(
+                holding.code,
+                holding.name,
+                f"{holding.holding_amount:,.2f}", # 格式化金额，带千位分隔符
+                f"{holding.yesterday_nav:.4f}",
+                f"{estimate_nav:.4f}" if estimate_nav is not None else "-",
+                estimate_change_pct_str
+            )
+        
+        console.print(table)
+        
+        # 打印总计信息
+        total_change = total_estimate_value - total_amount
+        total_change_pct = (total_change / total_amount) * 100 if total_amount > 0 else 0.0
+        
+        total_change_color = "bold green" if total_change < 0 else "bold red"
+        
+        console.print(f"\n[bold]持仓总成本[/bold]: [cyan]{total_amount:,.2f}[/cyan]")
+        console.print(f"[bold]预估总市值[/bold]: [cyan]{total_estimate_value:,.2f}[/cyan]")
+        console.print(f"[bold]预估总盈亏[/bold]: [{total_change_color}]{total_change:+.2f}[/{total_change_color}] ([{total_change_color}]{total_change_pct:+.2f}%[/{total_change_color}])")
+
+    except Exception as e:
+        console.print(f"[bold red]查询持仓时发生错误: {e}[/bold red]")
+    finally:
+        db.close()
+
+# --- 2. 添加新的 sync-history 命令 ---
+@cli_app.command(name="sync-history")
+def sync_history_command():
+    """
+    手动触发一次全量/增量的历史净值同步任务。
+    
+    这个命令会执行与每日定时任务完全相同的逻辑，
+    用于立即更新所有持仓基金的历史净值数据。
+    """
+    console.print("[bold yellow]🚀 开始手动执行历史净值同步任务...[/bold yellow]")
+    
+    try:
+        # 直接调用我们已经写好的业务逻辑函数
+        update_all_nav_history()
+        console.print("[bold green]✅ 同步任务执行完毕！[/bold green]")
+    except Exception as e:
+        # 捕获在同步过程中可能发生的任何顶层错误
+        console.print(f"[bold red]❌ 同步任务执行失败: {e}[/bold red]")
+        # 可以在这里添加更详细的错误日志记录
+        # import traceback
+        # traceback.print_exc()
+
+
+@cli_app.command(name="update-holding")
+def update_holding_command(
+    code: str = typer.Option(..., "--code", "-c", help="要更新的基金代码"),
+    amount: float = typer.Option(..., "--amount", "-a", help="新的持仓金额")
+):
+    """
+    更新一个已持仓基金的金额。
+    """
+    console.print(f"正在尝试更新基金 [cyan]{code}[/cyan] 的金额为 [cyan]{amount}[/cyan]...")
+    db = SessionLocal()
+    try:
+        updated_holding = services.update_holding_amount(db=db, code=code, new_amount=amount)
+        console.print(f"🎉 [bold green]更新成功！[/bold green] 新的持有金额为: {updated_holding.holding_amount:.2f}")
+    except services.HoldingNotFoundError as e:
+        console.print(f"[bold red]错误: {e}[/bold red]")
+    except Exception as e:
+        console.print(f"[bold red]发生未知错误: {e}[/bold red]")
+    finally:
+        db.close()
+
+@cli_app.command(name="delete-holding")
+def delete_holding_command(
+    code: str = typer.Argument(..., help="要删除的基金代码"),
+    force: bool = typer.Option(False, "--force", "-f", help="强制删除，不进行确认提示")
+):
+    """
+    删除一个持仓基金及其所有历史数据。
+    """
+    if not force:
+        # 添加一个确认步骤，防止误删
+        if not typer.confirm(f"⚠️ 您确定要删除基金代码为 [bold red]{code}[/bold red] 的所有记录吗？此操作不可撤销！"):
+            console.print("操作已取消。")
+            raise typer.Abort()
+
+    console.print(f"正在删除基金 [cyan]{code}[/cyan] 的所有记录...")
+    db = SessionLocal()
+    try:
+        services.delete_holding_by_code(db=db, code=code)
+        console.print(f"🗑️ [bold green]基金 {code} 已成功删除。[/bold green]")
+    except services.HoldingNotFoundError as e:
         console.print(f"[bold red]错误: {e}[/bold red]")
     except Exception as e:
         console.print(f"[bold red]发生未知错误: {e}[/bold red]")
