@@ -1,7 +1,7 @@
 # docker-compose.yml (简化后)
 services:
   fund_service: # 将两个服务合并成一个
-    build: .
+    image: fund-server:latest
     container_name: fund_service # 新的容器名
     env_file:
       - .env.prod
