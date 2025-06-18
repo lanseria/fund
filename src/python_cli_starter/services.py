@@ -3,7 +3,7 @@ from . import models, schemas, data_fetcher
 from sqlalchemy.orm import Session
 from datetime import date
 import pandas as pd
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 # 自定义一个业务逻辑层面的异常，以便CLI和API可以分别处理
 class HoldingExistsError(Exception):
@@ -178,3 +178,89 @@ def get_history_with_ma(
                 df[f'ma{ma}'] = df['nav'].rolling(window=ma).mean()
 
     return df
+
+def export_holdings_data(db: Session) -> List[Dict[str, Any]]:
+    """
+    导出所有持仓数据。
+    我们只导出核心数据：基金代码和持有份额。
+    """
+    holdings = db.query(models.Holding).all()
+    
+    # 构造一个只包含核心数据的列表
+    export_data = [
+        {
+            "code": h.code,
+            "shares": float(h.shares) # 将 Decimal 转换为 float 以便 JSON 序列化
+        }
+        for h in holdings
+    ]
+    return export_data
+
+def import_holdings_data(db: Session, data_to_import: List[Dict[str, Any]], overwrite: bool = False):
+    """
+    导入持仓数据。
+
+    Args:
+        db (Session): 数据库会话。
+        data_to_import (List[Dict[str, Any]]): 包含要导入数据的字典列表。
+        overwrite (bool): 是否覆盖现有数据。如果为 True，将先删除所有现有持仓。
+    
+    Returns:
+        A tuple (imported_count, skipped_count)
+    """
+    if overwrite:
+        print("覆盖模式已启用，正在删除所有现有持仓数据...")
+        db.query(models.NavHistory).delete()
+        db.query(models.Holding).delete()
+        # 注意：在覆盖模式下，我们不需要单独提交，因为后续操作在同一个事务中
+    
+    imported_count = 0
+    skipped_count = 0
+    
+    for item in data_to_import:
+        code = item.get("code")
+        shares = item.get("shares")
+
+        if not code or shares is None:
+            print(f"跳过无效记录: {item}")
+            skipped_count += 1
+            continue
+            
+        # 检查是否已存在 (仅在非覆盖模式下)
+        if not overwrite:
+            existing = db.query(models.Holding).filter_by(code=code).first()
+            if existing:
+                print(f"基金 {code} 已存在，跳过导入。")
+                skipped_count += 1
+                continue
+        
+        # 获取基金的最新信息来填充其他字段
+        realtime_data = data_fetcher.fetch_fund_realtime_estimate(code)
+        if not realtime_data:
+            print(f"无法获取基金 {code} 的信息，跳过导入。")
+            skipped_count += 1
+            continue
+            
+        name = realtime_data.get('name', 'N/A')
+        yesterday_nav = float(realtime_data.get('dwjz', 0))
+        
+        if yesterday_nav <= 0:
+            print(f"基金 {code} 的净值无效，跳过导入。")
+            skipped_count += 1
+            continue
+            
+        holding_amount = float(shares) * yesterday_nav
+        
+        new_holding = models.Holding(
+            code=code,
+            name=name,
+            shares=float(shares),
+            yesterday_nav=yesterday_nav,
+            holding_amount=holding_amount
+        )
+        db.add(new_holding)
+        imported_count += 1
+        print(f"准备导入基金: {code}, 份额: {shares}")
+
+    db.commit()
+    return imported_count, skipped_count

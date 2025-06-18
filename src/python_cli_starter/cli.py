@@ -2,8 +2,10 @@
 
 import typer
 from typing import Optional
+import json
 from rich.console import Console
 from rich.table import Table
+from pathlib import Path
 
 from .models import SessionLocal
 from . import services, schemas
@@ -205,6 +207,64 @@ def delete_holding_command(
         console.print(f"[bold red]错误: {e}[/bold red]")
     except Exception as e:
         console.print(f"[bold red]发生未知错误: {e}[/bold red]")
+    finally:
+        db.close()
+
+# --- 2. 添加新的 export-data 和 import-data 命令 ---
+@cli_app.command(name="export-data")
+def export_data_command(
+    output_file: Path = typer.Option(
+        "fund_holdings_export.json", 
+        "--output", "-o", 
+        help="导出数据的文件路径和名称。"
+    )
+):
+    """
+    将所有持仓的核心数据 (代码和份额) 导出到一个 JSON 文件。
+    """
+    console.print(f"准备将持仓数据导出到 [cyan]{output_file}[/cyan]...")
+    db = SessionLocal()
+    try:
+        data_to_export = services.export_holdings_data(db)
+        
+        with output_file.open("w", encoding="utf-8") as f:
+            json.dump(data_to_export, f, indent=2, ensure_ascii=False)
+            
+        console.print(f"✅ [bold green]数据已成功导出！共 {len(data_to_export)} 条记录。[/bold green]")
+    except Exception as e:
+        console.print(f"[bold red]导出数据时发生错误: {e}[/bold red]")
+    finally:
+        db.close()
+
+@cli_app.command(name="import-data")
+def import_data_command(
+    input_file: Path = typer.Argument(..., help="要从中导入数据的 JSON 文件路径。", exists=True),
+    overwrite: bool = typer.Option(False, "--overwrite", help="覆盖模式，导入前将删除所有现有数据。")
+):
+    """
+    从一个 JSON 文件中导入持仓数据。
+    """
+    console.print(f"准备从 [cyan]{input_file}[/cyan] 导入数据...")
+    if overwrite:
+        if not typer.confirm("⚠️ 您选择了覆盖模式，所有现有的持仓和历史数据都将被删除！您确定要继续吗？"):
+            console.print("操作已取消。")
+            raise typer.Abort()
+    
+    db = SessionLocal()
+    try:
+        with input_file.open("r", encoding="utf-8") as f:
+            data_to_import = json.load(f)
+
+        imported, skipped = services.import_holdings_data(db, data_to_import, overwrite)
+
+        console.print(f"✅ [bold green]数据导入完成！[/bold green]")
+        console.print(f"   - 成功导入: {imported} 条")
+        console.print(f"   - 跳过/失败: {skipped} 条")
+
+    except json.JSONDecodeError:
+        console.print(f"[bold red]错误: 文件 '{input_file}' 不是一个有效的 JSON 文件。[/bold red]")
+    except Exception as e:
+        console.print(f"[bold red]导入数据时发生错误: {e}[/bold red]")
     finally:
         db.close()
 
