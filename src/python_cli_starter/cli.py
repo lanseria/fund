@@ -96,6 +96,7 @@ def list_holdings_command():
         table.add_column("昨日净值 (NAV)", justify="right")
         table.add_column("今日估值 (Estimate)", justify="right")
         table.add_column("估算涨跌幅 (%)", justify="right")
+        table.add_column("估值更新时间", justify="right", style="dim")
 
         total_amount = 0.0
         total_estimate_value = 0.0
@@ -132,7 +133,8 @@ def list_holdings_command():
                 f"{holding.holding_amount:,.2f}", # 格式化金额，带千位分隔符
                 f"{holding.yesterday_nav:.4f}",
                 f"{estimate_nav:.4f}" if estimate_nav is not None else "-",
-                estimate_change_pct_str
+                estimate_change_pct_str,
+                f"{holding.today_estimate_update_time}" if holding.today_estimate_update_time else "-"
             )
         
         console.print(table)
