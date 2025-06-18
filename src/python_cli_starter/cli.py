@@ -40,11 +40,23 @@ def add_holding_command(
         holding_data = schemas.HoldingCreate(code=code, name=name or "", holding_amount=amount)
         new_holding = services.create_new_holding(db=db, holding_data=holding_data)
         
+        # --- 修改这里的表格 ---
         table = Table("属性", "值", title="🎉 基金添加成功！")
         table.add_row("基金代码 (Code)", new_holding.code)
         table.add_row("基金名称 (Name)", new_holding.name)
-        table.add_row("持有金额 (Amount)", f"{new_holding.holding_amount:.2f}")
-        table.add_row("昨日净值 (Yesterday NAV)", f"{new_holding.yesterday_nav:.4f}")
+        table.add_row("买入金额 (Amount)", f"{new_holding.holding_amount:,.2f}")
+        table.add_row("买入时净值 (NAV)", f"{new_holding.yesterday_nav:.4f}")
+        table.add_row("计算份额 (Shares)", f"{new_holding.shares:.4f}")
+        table.add_row("-" * 15, "-" * 20) # 分隔线
+        table.add_row("[bold]当前估算净值[/bold]", f"{new_holding.today_estimate_nav:.4f}" if new_holding.today_estimate_nav else "-")
+        table.add_row("[bold]当前估算金额[/bold]", f"{new_holding.today_estimate_amount:,.2f}" if new_holding.today_estimate_amount else "-")
+        
+        pct_str = "-"
+        if new_holding.percentage_change is not None:
+            color = "red" if new_holding.percentage_change > 0 else "green"
+            pct_str = f"[{color}]{new_holding.percentage_change:+.2f}%[/{color}]"
+        table.add_row("[bold]当前估算涨跌[/bold]", pct_str)
+        
         console.print(table)
     except services.HoldingExistsError as e:
         console.print(f"[bold red]错误: {e}[/bold red]")
@@ -176,7 +188,12 @@ def update_holding_command(
     db = SessionLocal()
     try:
         updated_holding = services.update_holding_amount(db=db, code=code, new_amount=amount)
-        console.print(f"🎉 [bold green]更新成功！[/bold green] 新的持有金额为: {updated_holding.holding_amount:.2f}")
+        console.print(f"🎉 [bold green]更新成功！[/bold green]")
+        console.print(f"   - 新的持有金额: {updated_holding.holding_amount:,.2f}")
+        console.print(f"   - 重新计算份额: {updated_holding.shares:.4f}")
+        
+        if updated_holding.today_estimate_nav:
+            console.print(f"   - 当前估算金额: {updated_holding.today_estimate_amount:,.2f}")
     except services.HoldingNotFoundError as e:
         console.print(f"[bold red]错误: {e}[/bold red]")
     except Exception as e:
