@@ -1,7 +1,7 @@
 # src/python_cli_starter/models.py
 
 from sqlalchemy import (create_engine, Column, String, Date, Float, Numeric, 
-                        PrimaryKeyConstraint, MetaData, text)
+                        PrimaryKeyConstraint, MetaData, text, DateTime)
 from sqlalchemy.orm import declarative_base, sessionmaker
 import os
 from dotenv import load_dotenv
@@ -26,12 +26,22 @@ class Holding(Base):
 
     code = Column(String, primary_key=True, index=True, comment="基金代码")
     name = Column(String, nullable=False, comment="基金名称")
-    yesterday_nav = Column(Numeric(10, 4), nullable=False, comment="昨日单位净值")
-    holding_amount = Column(Numeric(12, 2), nullable=False, comment="我持有的金额")
+    
+    # --- 核心数据 ---
+    shares = Column(Numeric(18, 4), nullable=False, comment="持有份额")
+    
+    # --- 每日校准数据 (由 update_all_nav_history 更新) ---
+    yesterday_nav = Column(Numeric(10, 4), nullable=False, comment="昨日单位净值 (最新实际净值)")
+    holding_amount = Column(Numeric(12, 2), nullable=False, comment="我持有的金额 (根据最新实际净值计算)")
+    
+    # --- 盘中估算数据 (由 update_today_estimate 更新) ---
     today_estimate_nav = Column(Float, nullable=True, comment="今日估算净值")
+    today_estimate_amount = Column(Numeric(12, 2), nullable=True, comment="今日估算金额")
+    percentage_change = Column(Float, nullable=True, comment="今日估算涨跌幅")
+    today_estimate_update_time = Column(DateTime(timezone=True), nullable=True, comment="今日估值更新时间")
     
     def __repr__(self):
-        return f"<Holding(code='{self.code}', name='{self.name}', amount={self.holding_amount})>"
+        return f"<Holding(code='{self.code}', shares={self.shares}, amount={self.holding_amount})>"
 
 # 表2：基金历史净值 (fund_nav_history)
 class NavHistory(Base):

@@ -13,10 +13,9 @@ class HoldingExistsError(Exception):
 
 def create_new_holding(db: Session, holding_data: schemas.HoldingCreate) -> models.Holding:
     """
-    创建新持仓的业务逻辑核心。
-    增强了对无法获取实时数据的基金的处理能力。
+    创建新持仓。核心逻辑是根据初始买入金额和当日净值计算出'持有份额'。
     """
-    # 1. 检查基金代码是否已存在
+    # 1. 检查存在性 (不变)
     existing_holding = db.query(models.Holding).filter(models.Holding.code == holding_data.code).first()
     if existing_holding:
         raise HoldingExistsError(code=holding_data.code)
@@ -52,15 +51,21 @@ def create_new_holding(db: Session, holding_data: schemas.HoldingCreate) -> mode
         # 如果API获取失败，用户也没提供名称，则无法继续
         raise ValueError(f"无法自动获取基金 {holding_data.code} 的名称，请通过 --name 参数手动提供。")
 
-    # 4. 创建新的数据库模型实例
+    if yesterday_nav <= 0:
+            raise ValueError(f"无法为基金 {holding_data.code} 获取有效的初始净值。")
+
+    # 3. 核心改动：计算份额
+    initial_shares = holding_data.holding_amount / yesterday_nav
+
+    # 4. 创建数据库模型实例
     db_holding = models.Holding(
         code=holding_data.code,
         name=final_name,
-        holding_amount=holding_data.holding_amount,
-        yesterday_nav=yesterday_nav # 使用获取到的或默认的昨日净值
+        shares=initial_shares,  # 存入计算出的份额
+        holding_amount=holding_data.holding_amount, # 初始金额等于买入金额
+        yesterday_nav=yesterday_nav # 初始净值等于买入时净值
     )
     
-    # 5. 提交到数据库
     db.add(db_holding)
     db.commit()
     db.refresh(db_holding)
@@ -76,22 +81,27 @@ class HoldingNotFoundError(Exception):
 def update_holding_amount(db: Session, code: str, new_amount: float) -> models.Holding:
     """
     更新指定基金的持仓金额。
-
-    Raises:
-        HoldingNotFoundError: 如果未找到指定代码的基金。
+    这个操作的含义是：将总资产调整到 new_amount，并根据昨日净值重新计算份额。
     """
-    # 1. 查找要更新的持仓记录
     holding_to_update = db.query(models.Holding).filter(models.Holding.code == code).first()
     
     if not holding_to_update:
         raise HoldingNotFoundError(code=code)
     
-    # 2. 更新金额
+    if holding_to_update.yesterday_nav <= 0:
+        raise ValueError(f"基金 {code} 的昨日净值为零或无效，无法重新计算份额。")
+
+    # 核心改动：根据新的总金额和最新的实际净值，重新计算总份额
+    new_shares = new_amount / float(holding_to_update.yesterday_nav)
+
+    # 更新金额和份额
     holding_to_update.holding_amount = new_amount
+    holding_to_update.shares = new_shares
     
-    # 3. 提交更改
     db.commit()
     db.refresh(holding_to_update)
+    
+    return holding_to_update
     
     return holding_to_update
 

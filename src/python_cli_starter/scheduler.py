@@ -5,6 +5,7 @@ import time
 import threading # 1. 导入 threading
 from datetime import date, timedelta
 from sqlalchemy import func
+from datetime import datetime
 
 # 导入我们的模型、数据获取器等
 from .models import SessionLocal, Holding, NavHistory
@@ -12,15 +13,13 @@ from .data_fetcher import fetch_fund_history, fetch_fund_realtime_estimate
 
 def update_all_nav_history():
     """
-    每日任务：增量更新所有持仓基金的历史净值。
-    - 对每个持仓基金，找到其在数据库中最新的净值日期。
-    - 只从数据源获取该日期之后的新数据，实现增量更新。
-    - 批量插入新获取的数据，提高效率。
+    每日任务：
+    1. 增量更新所有持仓基金的历史净值。
+    2. 使用最新的实际净值，校准每个持仓的'持有金额'和'昨日净值'字段。
     """
-    print("开始执行每日任务：更新历史净值...")
+    print("开始执行每日任务：更新历史净值与持仓金额校准...")
     db = SessionLocal()
     try:
-        # 1. 获取所有持仓基金
         holdings = db.query(Holding).all()
         if not holdings:
             print("没有持仓基金，任务结束。")
@@ -83,11 +82,30 @@ def update_all_nav_history():
             db.add_all(new_nav_records)
             db.commit() # 在每个基金处理完后提交一次，避免单个基金失败影响全部
             print(f"基金 {holding.code} 的历史净值更新成功！")
-            
             # 短暂休眠，避免请求过于频繁
-            time.sleep(1) 
+            time.sleep(1)
+            
+            # --- 新增的校准逻辑 ---
+            # 在插入完新的历史数据后，获取最新的那条实际净值记录
+            latest_nav_record = db.query(NavHistory)\
+                                .filter(NavHistory.code == holding.code)\
+                                .order_by(NavHistory.nav_date.desc())\
+                                .first()
+
+            if latest_nav_record:
+                # 使用最新的实际净值来校准持仓金额和昨日净值
+                latest_actual_nav = float(latest_nav_record.nav)
+                new_holding_amount = float(holding.shares) * latest_actual_nav
+                
+                holding.holding_amount = new_holding_amount
+                holding.yesterday_nav = latest_actual_nav
+                
+                print(f"基金 {holding.code} 的持仓已校准：最新净值 {latest_actual_nav}, 最新金额 {new_holding_amount:.2f}")
 
         print("\n所有基金的历史净值更新任务已全部完成。")
+        
+        db.commit() # 提交所有校准后的持仓数据
+        print("\n所有基金的历史净值更新与持仓金额校准任务已全部完成。")
 
     except Exception as e:
         db.rollback() # 如果在循环中发生意外错误，回滚当前未提交的事务
@@ -96,8 +114,7 @@ def update_all_nav_history():
         db.close()
 
 def update_today_estimate():
-    """盘中任务：每半小时更新今日估值"""
-    # ... 此函数保持不变 ...
+    """盘中任务：更新今日估值、估算金额、涨跌幅和更新时间。"""
     print("开始执行盘中任务：更新今日估值...")
     db = SessionLocal()
     try:
@@ -105,11 +122,26 @@ def update_today_estimate():
         for holding in holdings:
             realtime_data = fetch_fund_realtime_estimate(holding.code)
             if realtime_data and 'gsz' in realtime_data:
-                # 找到对应的持仓对象并更新
-                holding_to_update = db.query(Holding).filter(Holding.code == holding.code).first()
-                if holding_to_update:
-                    holding_to_update.today_estimate_nav = float(realtime_data['gsz'])
-                    print(f"基金 {holding.code} 的估值更新为: {holding_to_update.today_estimate_nav}")
+                try:
+                    # 1. 获取所有需要的数据
+                    estimate_nav = float(realtime_data['gsz'])
+                    change_pct = float(realtime_data['gszzl'])
+                    update_time_str = realtime_data['gztime']
+                    update_time = datetime.fromisoformat(update_time_str)
+                    
+                    # 2. 计算估算金额
+                    estimate_amount = float(holding.shares) * estimate_nav
+
+                    # 3. 更新数据库中的持仓对象
+                    holding.today_estimate_nav = estimate_nav
+                    holding.percentage_change = change_pct
+                    holding.today_estimate_update_time = update_time
+                    holding.today_estimate_amount = estimate_amount
+                    
+                    print(f"基金 {holding.code} 已更新，估值: {estimate_nav}, 估算金额: {estimate_amount:.2f}")
+                except (ValueError, TypeError) as e:
+                    print(f"处理基金 {holding.code} 的实时数据时出错: {e}")
+        
         db.commit()
         print("今日估值更新完成。")
     except Exception as e:
