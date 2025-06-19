@@ -28,7 +28,7 @@ dependencies = [
   "rich>=13.0.0",
   "python-dotenv>=1.0.0", # 版本更新到 >=1.0.0 比较常见
   "beautifulsoup4>=4.12.0", # 版本更新
-  "schedule>=1.2.2",
+  # "schedule>=1.2.2", # <-- 移除这一行
   "lark-oapi>=1.4.18", # 版本更新
   "httpx>=0.25.0", # 您代码中用到了 httpx，但没在依赖中
   "pytz>=2025.2", # 添加 pytz"
@@ -39,6 +39,7 @@ dependencies = [
   "fastapi>=0.115.12", # 用于搭建API服务
   "uvicorn[standard]>=0.23.0", # ASGI服务器，用于运行FastAPI应用
   "python-multipart>=0.0.20",
+  "akshare>=1.17.5",
 ]
 
 [project.scripts]

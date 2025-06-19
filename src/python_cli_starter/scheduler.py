@@ -1,7 +1,5 @@
-# src/python_cli_starter/scheduler.py
-import schedule
+# src/python_cli_starter/scheduler.py (修改后)
 import time
-import threading
 from datetime import date, timedelta, datetime
 from sqlalchemy import func
 import logging
@@ -12,8 +10,8 @@ from .data_fetcher import fetch_fund_history, fetch_fund_realtime_estimate
 logger = logging.getLogger(__name__)
 
 def update_all_nav_history():
-    """每日任务：增量更新所有持仓基金的历史净值，并校准持仓金额。"""
-    logger.info("开始执行每日任务：更新历史净值与持仓金额校准...")
+    """手动任务：增量更新所有持仓基金的历史净值，并校准持仓金额。"""
+    logger.info("开始执行任务：更新历史净值与持仓金额校准...")
     db = SessionLocal()
     try:
         holdings = db.query(Holding).all()
@@ -76,8 +74,8 @@ def update_all_nav_history():
         db.close()
 
 def update_today_estimate():
-    """盘中任务：更新今日估值、估算金额、涨跌幅和更新时间。"""
-    logger.info("开始执行盘中任务：更新今日估值...")
+    """手动任务：更新今日估值、估算金额、涨跌幅和更新时间。"""
+    logger.info("开始执行任务：更新今日估值...")
     db = SessionLocal()
     try:
         holdings = db.query(Holding).all()
@@ -106,67 +104,3 @@ def update_today_estimate():
         logger.exception("更新今日估值时发生错误。")
     finally:
         db.close()
-
-class SchedulerRunner:
-    def __init__(self):
-        self._stop_event = threading.Event()
-        self._thread = None
-        self._setup_schedule()
-
-    def _setup_schedule(self):
-        """配置所有的定时任务 (优化后)。"""
-        logger.info("正在配置定时任务...")
-        
-        # 每日净值同步任务
-        schedule.every().day.at("02:00").do(update_all_nav_history)
-        
-        # --- 代码优化：使用循环配置周一到周五的盘中任务 ---
-        weekdays = [
-            schedule.every().monday, schedule.every().tuesday, 
-            schedule.every().wednesday, schedule.every().thursday, 
-            schedule.every().friday
-        ]
-        
-        # 交易时间从 9 点到 14 点 (不含15点)
-        for hour in range(9, 15):
-            for day in weekdays:
-                # 在每个小时的30分执行
-                day.at(f"{hour:02d}:30").do(update_today_estimate)
-        
-        logger.info("所有定时任务配置完成。")
-
-    def _run_continuously(self):
-        """在一个循环中运行所有待处理的任务，直到停止事件被设置。"""
-        logger.info("调度器线程已启动，等待执行任务...")
-        
-        logger.info("首次启动，立即执行一次历史净值更新任务...")
-        try:
-            update_all_nav_history()
-        except Exception:
-            logger.exception("首次启动执行历史净值更新任务失败。")
-        
-        while not self._stop_event.is_set():
-            schedule.run_pending()
-            time.sleep(1)
-        
-        logger.info("调度器线程已接收到停止信号，正在退出。")
-
-    def start(self):
-        """在后台线程中启动调度器。"""
-        if self._thread is None or not self._thread.is_alive():
-            logger.info("启动后台调度器线程...")
-            self._stop_event.clear()
-            self._thread = threading.Thread(target=self._run_continuously)
-            self._thread.daemon = True
-            self._thread.start()
-
-    def stop(self):
-        """停止调度器线程。"""
-        if self._thread and self._thread.is_alive():
-            logger.info("正在发送停止信号给调度器线程...")
-            self._stop_event.set()
-            self._thread.join(timeout=5)
-            if self._thread.is_alive():
-                logger.warning("警告：调度器线程未在5秒内正常停止。")
-
-scheduler_runner = SchedulerRunner()

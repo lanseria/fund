@@ -1,4 +1,4 @@
-# src/python_cli_starter/main.py (更新后)
+# src/python_cli_starter/main.py (修改后)
 from fastapi import FastAPI, Depends, HTTPException, Query, Response, status, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 from datetime import date
@@ -10,9 +10,10 @@ import logging
 
 # 1. 导入新的日志配置和我们自己的模块
 from .logger_config import setup_logging
-from .scheduler import scheduler_runner
+# from .scheduler import scheduler_runner # <-- 移除导入
 from . import models, crud, schemas, services
 from .models import SessionLocal
+from .strategies import STRATEGY_REGISTRY
 
 # 2. 在应用启动前，最先配置日志
 setup_logging()
@@ -25,15 +26,13 @@ models.create_db_and_tables()
 async def lifespan(app: FastAPI):
     # 在应用启动时执行的代码
     logger.info("FastAPI 应用启动...")
-    # 启动后台调度器
-    scheduler_runner.start()
+    # 移除启动后台调度器的代码
     
     yield # 这是应用运行的时间点
     
     # 在应用关闭时执行的代码
     logger.info("FastAPI 应用关闭...")
-    # 停止后台调度器
-    scheduler_runner.stop()
+    # 移除停止后台调度器的代码
 
 # 将FastAPI实例命名为 api_app，以示区分
 api_app = FastAPI(title="基金投资助手 API", lifespan=lifespan)
@@ -147,3 +146,55 @@ async def import_data_endpoint(
     except Exception as e:
         logger.exception(f"An unexpected error occurred during the import process for file '{file.filename}'.")
         raise HTTPException(status_code=500, detail=f"导入过程中发生错误: {str(e)}")
+    
+
+@api_app.get(
+    "/strategies/{strategy_name}/{fund_code}", 
+    response_model=schemas.StrategySignal, 
+    summary="获取基金策略信号"
+)
+def get_strategy_signal(strategy_name: str, fund_code: str):
+    """
+    根据指定的策略名称和基金代码，运行分析并返回交易信号。
+
+    - **strategy_name**: 策略的简称 (例如: `rsi`)。
+    - **fund_code**: 要分析的基金代码。
+    """
+    logger.info(f"收到策略分析请求: strategy='{strategy_name}', code='{fund_code}'")
+
+    # 1. 从注册表中查找策略函数
+    strategy_function = STRATEGY_REGISTRY.get(strategy_name)
+    if not strategy_function:
+        logger.warning(f"请求了未知的策略: '{strategy_name}'")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"策略 '{strategy_name}' 不存在。可用策略: {list(STRATEGY_REGISTRY.keys())}"
+        )
+
+    try:
+        # 2. 执行策略函数
+        result_dict = strategy_function(fund_code)
+
+        # 3. 处理策略执行可能返回的错误
+        if result_dict.get("error"):
+            error_message = result_dict["error"]
+            logger.error(f"策略 '{strategy_name}' 执行失败: {error_message}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=error_message
+            )
+
+        # 4. 封装并返回成功的响应
+        response_data = schemas.StrategySignal(
+            fund_code=fund_code,
+            strategy_name=strategy_name,
+            **result_dict
+        )
+        return response_data
+
+    except Exception as e:
+        logger.exception(f"执行策略 '{strategy_name}' 时发生意外错误。")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"执行策略时发生内部错误: {str(e)}"
+        )
