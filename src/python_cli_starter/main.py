@@ -1,6 +1,7 @@
 # src/python_cli_starter/main.py (修改后)
-from fastapi import FastAPI, Depends, HTTPException, Query, Response, status, UploadFile, File, Form
+from fastapi import FastAPI, Depends, HTTPException, Query, Response, status, UploadFile, File, Form, Query
 from fastapi.responses import JSONResponse
+import inspect
 from datetime import date
 from typing import List, Optional
 from sqlalchemy.orm import Session
@@ -147,22 +148,25 @@ async def import_data_endpoint(
         logger.exception(f"An unexpected error occurred during the import process for file '{file.filename}'.")
         raise HTTPException(status_code=500, detail=f"导入过程中发生错误: {str(e)}")
     
-
 @api_app.get(
     "/strategies/{strategy_name}/{fund_code}", 
     response_model=schemas.StrategySignal, 
     summary="获取基金策略信号"
 )
-def get_strategy_signal(strategy_name: str, fund_code: str):
+def get_strategy_signal(
+    strategy_name: str, 
+    fund_code: str,
+    is_holding: Optional[bool] = Query(None, description="【可选】对于需要持仓状态的策略，指定当前是否持有该基金。") # <-- 添加 is_holding 参数
+):
     """
     根据指定的策略名称和基金代码，运行分析并返回交易信号。
 
-    - **strategy_name**: 策略的简称 (例如: `rsi`)。
+    - **strategy_name**: 策略的简称 (例如: `rsi`, `bollinger_bands`)。
     - **fund_code**: 要分析的基金代码。
+    - **is_holding**: (可选) 对于像布林带这样的策略，需要提供此参数 (`true`/`false`)。
     """
-    logger.info(f"收到策略分析请求: strategy='{strategy_name}', code='{fund_code}'")
+    logger.info(f"收到策略分析请求: strategy='{strategy_name}', code='{fund_code}', is_holding={is_holding}")
 
-    # 1. 从注册表中查找策略函数
     strategy_function = STRATEGY_REGISTRY.get(strategy_name)
     if not strategy_function:
         logger.warning(f"请求了未知的策略: '{strategy_name}'")
@@ -172,10 +176,28 @@ def get_strategy_signal(strategy_name: str, fund_code: str):
         )
 
     try:
-        # 2. 执行策略函数
-        result_dict = strategy_function(fund_code)
+        # --- 智能参数传递 ---
+        # 检查策略函数需要哪些参数
+        sig = inspect.signature(strategy_function)
+        params = {}
+        
+        # 必须提供 fund_code
+        if 'fund_code' in sig.parameters:
+            params['fund_code'] = fund_code
+        
+        # 如果策略需要 is_holding，则传递它
+        if 'is_holding' in sig.parameters:
+            if is_holding is None:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"策略 '{strategy_name}' 需要 'is_holding' (true/false) 查询参数。"
+                )
+            params['is_holding'] = is_holding
 
-        # 3. 处理策略执行可能返回的错误
+        # 执行策略函数，并传入构造好的参数
+        result_dict = strategy_function(**params)
+        
+        # (后续错误处理和响应封装保持不变)
         if result_dict.get("error"):
             error_message = result_dict["error"]
             logger.error(f"策略 '{strategy_name}' 执行失败: {error_message}")
@@ -184,7 +206,6 @@ def get_strategy_signal(strategy_name: str, fund_code: str):
                 detail=error_message
             )
 
-        # 4. 封装并返回成功的响应
         response_data = schemas.StrategySignal(
             fund_code=fund_code,
             strategy_name=strategy_name,
@@ -192,6 +213,9 @@ def get_strategy_signal(strategy_name: str, fund_code: str):
         )
         return response_data
 
+    except HTTPException as http_exc:
+        # 重新抛出已知的HTTP异常
+        raise http_exc
     except Exception as e:
         logger.exception(f"执行策略 '{strategy_name}' 时发生意外错误。")
         raise HTTPException(
