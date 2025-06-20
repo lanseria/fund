@@ -1,6 +1,6 @@
 services:
   fund_strategies_service: 
-    image: fund-server:latest
+    image: fund-strategies-service:latest
     container_name: fund_strategies_service
     env_file:
       - .env.prod

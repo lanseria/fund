@@ -154,32 +154,11 @@ uv run cli import-data a_backup.json --overwrite
 ### 2. 构建 Docker 镜像 (打包)
 
 ```bash
-docker build -t fund-server:latest .
+docker build -t fund-strategies-service:latest .
 ```
 
 ### 3. 运行服务 (Docker Compose)
 
-确保 `docker-compose.yml` 配置正确：
-```yaml
-# docker-compose.yml
-services:
-  fund_service:
-    image: fund-server:latest
-    container_name: fund_service
-    env_file:
-      - .env.prod
-    ports:
-      - "8888:8888"
-    command: >
-      sh -c "python -m uvicorn src.python_cli_starter.main:api_app --host 0.0.0.0 --port 8888"
-    restart: unless-stopped
-    networks:
-      - shared_app_net
-networks:
-  shared_app_net:
-    external: true
-    name: shared-db-network
-```
 启动服务：
 ```bash
 docker compose up -d
