@@ -148,3 +148,22 @@ API会通过标准的HTTP状态码来反馈错误。
 #### 示例 4: 获取 `003096` 基金的双均线交叉策略信号（假设当前未持有）
 ```bash
 curl -X GET "http://127.0.0.1:8888/strategies/ma_cross/003096?is_holding=false"
+
+### 3.5. MACD 趋势跟踪策略
+
+*   **策略名称**: `macd`
+*   **简介**: 经典的趋势跟踪指标，通过分析短期与长期指数移动平均线之间的差离值（DIF）和其信号线（DEA）的交叉情况来判断买卖时机。“金叉”为买入信号，“死叉”为卖出信号。
+*   **所需参数**: **必须**提供 `is_holding` 查询参数。
+*   **`metrics` 指标详解**:
+    *   `macd_short_period` (integer): DIF计算中的快线周期，默认为12。
+    *   `macd_long_period` (integer): DIF计算中的慢线周期，默认为26。
+    *   `macd_signal_period` (integer): DEA计算的周期，默认为9。
+    *   `dif_value` (float): 最新的DIF线（MACD线）的值。
+    *   `dea_value` (float): 最新的DEA线（信号线）的值。
+    *   `macd_hist_value` (float): 最新的MACD柱状图的值 (DIF - DEA)。
+
+... (更新使用示例)
+
+#### 示例 6: 获取 `001632` 基金的MACD策略信号（假设当前未持有）
+```bash
+curl -X GET "http://127.0.0.1:8888/strategies/macd/001632?is_holding=false"
