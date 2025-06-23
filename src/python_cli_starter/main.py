@@ -15,6 +15,7 @@ from .logger_config import setup_logging
 from . import models, crud, schemas, services
 from .models import SessionLocal
 from .strategies import STRATEGY_REGISTRY
+from . import charts
 
 # 2. 在应用启动前，最先配置日志
 setup_logging()
@@ -222,3 +223,29 @@ def get_strategy_signal(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"执行策略时发生内部错误: {str(e)}"
         )
+    
+# --- 在文件末尾添加新的图表 API 端点 ---
+@api_app.get(
+    "/charts/rsi/{fund_code}",
+    summary="获取RSI策略图表数据 (ECharts)",
+    tags=["Charts"] # 使用 tags 对 API 进行分组
+)
+def get_rsi_chart_endpoint(
+    fund_code: str,
+    start_date: date = Query(..., description="图表数据开始日期 (格式: YYYY-MM-DD)")
+):
+    """
+    获取指定基金在特定时间范围内的历史净值和RSI指标数据，
+    返回格式适配 ECharts，用于绘制策略回测图。
+    """
+    logger.info(f"收到RSI图表数据请求: code='{fund_code}', start_date='{start_date}'")
+    
+    chart_data = charts.get_rsi_chart_data(fund_code, start_date.isoformat())
+    
+    if chart_data is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"无法为基金 {fund_code} 从日期 {start_date} 生成图表数据，请检查代码或日期范围。"
+        )
+        
+    return chart_data
