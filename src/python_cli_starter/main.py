@@ -224,28 +224,26 @@ def get_strategy_signal(
             detail=f"执行策略时发生内部错误: {str(e)}"
         )
     
-# --- 在文件末尾添加新的图表 API 端点 ---
+
 @api_app.get(
     "/charts/rsi/{fund_code}",
-    summary="获取RSI策略图表数据 (ECharts)",
+    summary="获取RSI策略图表数据 (ECharts, 全部历史)",
     tags=["Charts"] # 使用 tags 对 API 进行分组
 )
-def get_rsi_chart_endpoint(
-    fund_code: str,
-    start_date: date = Query(..., description="图表数据开始日期 (格式: YYYY-MM-DD)")
-):
+def get_rsi_chart_endpoint(fund_code: str):
     """
-    获取指定基金在特定时间范围内的历史净值和RSI指标数据，
+    获取指定基金的全部历史净值和RSI指标数据，
     返回格式适配 ECharts，用于绘制策略回测图。
     """
-    logger.info(f"收到RSI图表数据请求: code='{fund_code}', start_date='{start_date}'")
+    logger.info(f"收到RSI图表数据请求 (全部历史): code='{fund_code}'")
     
-    chart_data = charts.get_rsi_chart_data(fund_code, start_date.isoformat())
+    # 调用更新后的函数，不再传递 start_date
+    chart_data = charts.get_rsi_chart_data(fund_code)
     
     if chart_data is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"无法为基金 {fund_code} 从日期 {start_date} 生成图表数据，请检查代码或日期范围。"
+            detail=f"无法为基金 {fund_code} 生成图表数据，请检查代码或确认该基金有历史数据。"
         )
         
     return chart_data

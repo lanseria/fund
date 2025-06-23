@@ -1,9 +1,10 @@
-# src/python_cli_starter/charts.py
+# src/python_cli_starter/charts.py (修改后)
 
 import akshare as ak
 import pandas as pd
 from datetime import datetime, timedelta
 import logging
+import numpy as np
 from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
@@ -13,9 +14,9 @@ RSI_PERIOD = 14
 RSI_UPPER = 70.0
 RSI_LOWER = 30.0
 
-def get_historical_fund_data(fund_symbol: str, start_date: str) -> Optional[pd.DataFrame]:
-    """获取指定基金从开始日期至今的全部历史净值数据。"""
-    logger.info(f"[Charts] 正在为基金 {fund_symbol} 获取历史净值数据 (从 {start_date} 开始)...")
+def get_historical_fund_data(fund_symbol: str) -> Optional[pd.DataFrame]:
+    """获取指定基金的全部历史净值数据。"""
+    logger.info(f"[Charts] 正在为基金 {fund_symbol} 获取全部历史净值数据...")
     try:
         fund_nav_df = ak.fund_open_fund_info_em(symbol=fund_symbol, indicator="单位净值走势")
         fund_nav_df['净值日期'] = pd.to_datetime(fund_nav_df['净值日期'])
@@ -24,18 +25,15 @@ def get_historical_fund_data(fund_symbol: str, start_date: str) -> Optional[pd.D
         fund_nav_df.columns = ['close']
         fund_nav_df['close'] = pd.to_numeric(fund_nav_df['close'])
         
+        # 按日期升序排序
         fund_nav_df = fund_nav_df.sort_index(ascending=True)
-        # 为了确保RSI计算的准确性，我们需要在开始日期前回溯一段数据
-        # 比如多获取 2 * RSI_PERIOD 天的数据
-        buffer_start_date = (pd.to_datetime(start_date) - timedelta(days=2 * RSI_PERIOD)).strftime('%Y-%m-%d')
-        full_df = fund_nav_df[buffer_start_date:]
 
-        if full_df.empty:
+        if fund_nav_df.empty:
             logger.warning(f"获取基金 {fund_symbol} 数据为空。")
             return None
             
-        logger.info(f"数据获取成功！共获取 {len(full_df)} 条记录。")
-        return full_df
+        logger.info(f"数据获取成功！共获取 {len(fund_nav_df)} 条记录。")
+        return fund_nav_df
         
     except Exception as e:
         logger.error(f"获取基金 {fund_symbol} 数据时发生错误: {e}")
@@ -74,42 +72,45 @@ def generate_rsi_signals(data: pd.DataFrame) -> pd.DataFrame:
             position = 0
     return pd.DataFrame(signals)
 
-def get_rsi_chart_data(fund_code: str, start_date: str) -> Optional[Dict[str, Any]]:
+def get_rsi_chart_data(fund_code: str) -> Optional[Dict[str, Any]]:
     """
-    为RSI策略生成 ECharts 所需的图表数据。
+    为RSI策略生成 ECharts 所需的图表数据 (全部历史)。
     """
-    df_full = get_historical_fund_data(fund_code, start_date)
-    if df_full is None:
+    df_full = get_historical_fund_data(fund_code)
+    if df_full is None or df_full.empty:
         return None
 
     df_with_rsi = calculate_rsi(df_full, period=RSI_PERIOD)
     
-    # 截取从 start_date 开始的最终数据用于显示
-    df_display = df_with_rsi[start_date:].copy()
+    signals_df = generate_rsi_signals(df_with_rsi)
 
-    if df_display.empty:
-        return None
-
-    signals_df = generate_rsi_signals(df_display)
+    # --- 核心修改在这里 ---
+    # 在序列化之前，将所有 NaN, Inf, -Inf 替换为 None (JSON中的null)
+    df_with_rsi.replace([np.inf, -np.inf], np.nan, inplace=True)
+    df_with_rsi.fillna(value=np.nan, inplace=True) # 确保所有缺失值都是 np.nan
 
     # 准备 ECharts 数据
-    dates = df_display.index.strftime('%Y-%m-%d').tolist()
-    rsi_values = df_display['rsi'].round(2).where(pd.notna(df_display['rsi']), None).tolist()
-    net_values = df_display['close'].round(4).tolist()
+    dates = df_with_rsi.index.strftime('%Y-%m-%d').tolist()
+    
+    # 将 Series 转换为列表，并在转换过程中处理 NaN
+    net_values = [None if pd.isna(v) else round(v, 4) for v in df_with_rsi['close']]
+    rsi_values = [None if pd.isna(v) else round(v, 2) for v in df_with_rsi['rsi']]
 
     # 准备买卖信号点数据
     buy_signals = []
     sell_signals = []
     if not signals_df.empty:
         for _, row in signals_df.iterrows():
-            signal_point = {
-                'coord': [row['date'].strftime('%Y-%m-%d'), round(row['rsi'], 2)],
-                'value': '买入' if row['type'] == 'buy' else '卖出'
-            }
-            if row['type'] == 'buy':
-                buy_signals.append(signal_point)
-            else:
-                sell_signals.append(signal_point)
+            # 同样要检查信号点上的rsi值是否为nan
+            if pd.notna(row['rsi']):
+                signal_point = {
+                    'coord': [row['date'].strftime('%Y-%m-%d'), round(row['rsi'], 2)],
+                    'value': '买入' if row['type'] == 'buy' else '卖出'
+                }
+                if row['type'] == 'buy':
+                    buy_signals.append(signal_point)
+                else:
+                    sell_signals.append(signal_point)
 
     return {
         "dates": dates,
